@@ -148,4 +148,22 @@ public interface GridMultiSelectionModel<T>
      * @return whether the selection column is frozen
      */
     boolean isSelectionColumnFrozen();
+
+    /**
+     * If <code>true</code>, grid's rows can be selected or deselected by
+     * dragging the mouse cursor over gird's selection column.
+     *
+     * @param selectRowsByDragging
+     *            <code>true</code> to enable selection by dragging feature,
+     *            <code>false</code> for disabling it
+     */
+    void setSelectRowsByDragging(boolean selectRowsByDragging);
+
+    /**
+     * Gets whether grid's selection by dragging is enabled or not.
+     *
+     * @return <code>true</code> if selection by dragging feature is enabled,
+     *         <code>false</code> otherwise
+     */
+    boolean isSelectRowsByDragging();
 }
