@@ -1,71 +1,22 @@
 import '@vaadin/grid/vaadin-grid-column.js';
-import { GridColumn } from '@vaadin/grid/src/vaadin-grid-column.js';
 import { addListener } from '@vaadin/component-base/src/gestures.js';
+import { GridColumn } from '@vaadin/grid/src/vaadin-grid-column.js';
+import { GridSelectionColumnBaseMixin } from '@vaadin/grid/src/vaadin-grid-selection-column-base-mixin.js';
 {
-  class GridFlowSelectionColumnElement extends GridColumn {
-
+  class GridFlowSelectionColumnElement extends GridSelectionColumnBaseMixin(GridColumn) {
     static get is() {
       return 'vaadin-grid-flow-selection-column';
     }
 
     static get properties() {
       return {
-
         /**
          * Automatically sets the width of the column based on the column contents when this is set to `true`.
          */
         autoWidth: {
           type: Boolean,
-          value: true
+          value: true,
         },
-
-        /**
-         * Width of the cells for this column.
-         */
-        width: {
-          type: String,
-          value: '56px'
-        },
-
-        /**
-         * Flex grow ratio for the cell widths. When set to 0, cell width is fixed.
-         */
-        flexGrow: {
-          type: Number,
-          value: 0
-        },
-
-        /**
-         * When true, all the items are selected.
-         */
-        selectAll: {
-          type: Boolean,
-          value: false,
-          notify: true
-        },
-        
-        /**
-         * When true, rows can be selected by dragging mouse cursor over selection column.
-         * @attr {boolean} select-rows-by-dragging
-         * @type {boolean}
-         */
-        selectRowsByDragging: {
-          type: Boolean,
-          value: false,
-          reflectToAttribute: true,
-        },
-
-        /**
-         * Whether to display the select all checkbox in indeterminate state,
-         * which means some, but not all, items are selected
-         */
-        indeterminate: {
-          type: Boolean,
-          value: false,
-          notify: true
-        },
-
-        selectAllHidden: Boolean
       };
     }
 
@@ -74,12 +25,7 @@ import { addListener } from '@vaadin/component-base/src/gestures.js';
       this._boundOnSelectEvent = this._onSelectEvent.bind(this);
       this._boundOnDeselectEvent = this._onDeselectEvent.bind(this);
       this.__onSelectionColumnCellTrack = this.__onSelectionColumnCellTrack.bind(this);
-    }
-
-    static get observers() {
-      return [
-        '_onHeaderRendererOrBindingChanged(_headerRenderer, _headerCell, path, header, selectAll, indeterminate, selectAllHidden)'
-      ];
+      this.__onSelectionColumnCellMouseDown = this.__onSelectionColumnCellMouseDown.bind(this);
     }
 
     /** @private */
@@ -117,85 +63,10 @@ import { addListener } from '@vaadin/component-base/src/gestures.js';
       }
 
       const checked = this.selectAll;
-      checkbox.hidden = this.selectAllHidden;
+      checkbox.hidden = this._selectAllHidden;
       checkbox.checked = checked;
-      checkbox.indeterminate = this.indeterminate;
+      checkbox.indeterminate = this._indeterminate;
     }
-    
-    /** @private */
-  __lassoAutoScroller() {
-    if (this.__lassoDragStartIndex !== undefined) {
-      // Get the row being hovered over
-      const renderedRows = this._grid._getRenderedRows();
-      let rowHeight = 30;
-      const hoveredRow = renderedRows.find((row) => {
-        const rowRect = row.getBoundingClientRect();
-        rowHeight = rowRect.height;
-        return this.__lassoCurrentY >= rowRect.top && this.__lassoCurrentY <= rowRect.bottom;
-      });
-
-      // Get the index of the row being hovered over or the first/last
-      // visible row if hovering outside the grid
-      let hoveredIndex = hoveredRow ? hoveredRow.index : undefined;
-      const gridRect = this._grid.getBoundingClientRect();
-      if (this.__lassoCurrentY < gridRect.top) {
-        hoveredIndex = this._grid._firstVisibleIndex;
-      } else if (this.__lassoCurrentY > gridRect.bottom) {
-        hoveredIndex = this._grid._lastVisibleIndex;
-      }
-
-      if (hoveredIndex !== undefined) {
-        // Select all items between the start and the current row
-        renderedRows.forEach((row) => {
-          if (
-            (hoveredIndex > this.__lassoDragStartIndex &&
-              row.index >= this.__lassoDragStartIndex &&
-              row.index <= hoveredIndex) ||
-            (hoveredIndex < this.__lassoDragStartIndex &&
-              row.index <= this.__lassoDragStartIndex &&
-              row.index >= hoveredIndex)
-          ) {
-            if (this.__lassoSelect) {
-			  this._grid.$connector.doSelection([row._item], true)
-            } else {
-              this._grid.$connector.doDeselection([row._item], true)
-            }
-          }
-        });
-      }
-
-      // Auto scroll the grid
-      this._grid.$.table.scrollTop += (this.__lassoDy || 0) / (rowHeight / 2);
-
-      // Schedule the next auto scroll
-      setTimeout(() => this.__lassoAutoScroller(), 100);
-    }
-  }
-
-  /** @private */
-  __onSelectionColumnCellTrack(event) {
-	if (!this.selectRowsByDragging) {
-		return;
-	}
-    this.__lassoDy = event.detail.dy;
-    this.__lassoCurrentY = event.detail.y;
-    if (event.detail.state === 'start') {
-      this._grid.setAttribute('disable-text-selection', true);
-      this.__lassoWasEnabled = true;
-      const renderedRows = this._grid._getRenderedRows();
-      // Get the row where the drag started
-      const lassoStartRow = renderedRows.find((row) => row.contains(event.currentTarget.assignedSlot));
-      // Whether to select or deselect the items on drag
-      this.__lassoSelect = !this._grid._isSelected(lassoStartRow._item);
-      // Store the index of the row where the drag started
-      this.__lassoDragStartIndex = lassoStartRow.index;
-      // Start the auto scroller
-      this.__lassoAutoScroller();
-    } else if (event.detail.state === 'end') {
-      this.__lassoDragStartIndex = undefined;
-      this._grid.removeAttribute('disable-text-selection');
-    }
-  }
 
     /**
      * Renders the Select Row checkbox to the body cell.
@@ -210,13 +81,20 @@ import { addListener } from '@vaadin/component-base/src/gestures.js';
         checkbox.addEventListener('click', this._onSelectClick.bind(this));
         root.appendChild(checkbox);
         addListener(root, 'track', this.__onSelectionColumnCellTrack);
+        root.addEventListener('mousedown', this.__onSelectionColumnCellMouseDown);
       }
       checkbox.__item = item;
       checkbox.checked = selected;
     }
 
     _onSelectClick(e) {
-      e.currentTarget.checked ? this._grid.$connector.doDeselection([e.currentTarget.__item], true) : this._grid.$connector.doSelection([e.currentTarget.__item], true);
+      // ignore checkbox mouse click if start item was already selected or deselected by lasso selection
+      if (this.selectRowsByDragging && this.__lassoDragStartItem) {
+        e.preventDefault();
+      } else {
+        e.currentTarget.checked ? this._deselectItem(e.currentTarget.__item) : this._selectItem(e.currentTarget.__item);
+      }
+      this.__lassoDragStartItem = undefined;
     }
 
     _onSelectAllClick(e) {
@@ -228,13 +106,36 @@ import { addListener } from '@vaadin/component-base/src/gestures.js';
       this.selectAll ? this.$server.deselectAll() : this.$server.selectAll();
     }
 
-    _onSelectEvent(e) {
-    }
+    _onSelectEvent(e) {}
 
     _onDeselectEvent(e) {
       if (e.detail.userOriginated) {
         this.selectAll = false;
       }
+    }
+
+    /**
+     * Override a method from `GridSelectionColumnBaseMixin` to handle the user
+     * selecting an item.
+     *
+     * @param {Object} item the item to select
+     * @protected
+     * @override
+     */
+    _selectItem(item) {
+      this._grid.$connector.doSelection([item], true);
+    }
+
+    /**
+     * Override a method from `GridSelectionColumnBaseMixin` to handle the user
+     * deselecting an item.
+     *
+     * @param {Object} item the item to deselect
+     * @protected
+     * @override
+     */
+    _deselectItem(item) {
+      this._grid.$connector.doDeselection([item], true);
     }
   }
 
